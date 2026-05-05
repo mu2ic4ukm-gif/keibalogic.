@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>🏇競馬analyzer🏇</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Bebas+Neue&display=swap');
+:root{--bg:#07070d;--s1:#0f0f18;--s2:#171724;--bd:#252538;--acc:#d4a843;--red:#c94f4f;--txt:#dddde8;--sub:#666688;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--txt);font-family:'Noto Sans JP',sans-serif;}
+.wrap{max-width:960px;margin:0 auto;padding:15px;}
+.hd{text-align:center;padding:20px 0;border-bottom:2px solid var(--acc);margin-bottom:20px;}
+.hd h1{font-size:24px;letter-spacing:2px;color:var(--acc);}
+.pb{background:var(--s1);border:1px solid var(--bd);border-radius:8px;padding:12px;margin-bottom:12px;}
+.pl{font-size:11px;font-weight:700;color:var(--acc);margin-bottom:6px;display:block;}
+textarea{width:100%;background:var(--s2);border:1px solid var(--bd);border-radius:6px;color:var(--txt);padding:10px;font-size:11px;min-height:80px;outline:none;}
+.btn-group{display:grid;grid-template-columns:1fr 3fr;gap:10px;margin-bottom:20px;}
+.btn{padding:16px;border:none;border-radius:8px;font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:4px;cursor:pointer;transition:0.2s;}
+.btn-clr{background:var(--s2);color:var(--sub);border:1px solid var(--bd);}
+.btn-run{background:var(--acc);color:#000;}
+.btn:active{opacity:0.7;transform:scale(0.98);}
+.sec{background:var(--s1);border:1px solid var(--bd);border-radius:10px;padding:15px;margin-top:20px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{background:var(--s2);color:var(--sub);padding:8px;font-size:10px;text-align:center;}
+td{padding:10px 8px;border-bottom:1px solid var(--bd);vertical-align:middle;}
+.mark{font-family:'Bebas Neue',sans-serif;font-size:26px;font-weight:900;}
+.wc{width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;margin:auto;}
+.w1{background:#fff;color:#000;}.w2{background:#222;color:#fff;}.w3{background:#c0392b;color:#fff;}.w4{background:#2471a3;color:#fff;}.w5{background:#d4ac0d;color:#000;}.w6{background:#1e8449;color:#fff;}.w7{background:#d35400;color:#fff;}.w8{background:#c0185a;color:#fff;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hd"><h1>🏇競馬analyzer🏇</h1></div>
+  
+  <div class="pb">
+    <span class="pl">1. 出走馬一覧 (netkeibaの表全体をコピー)</span>
+    <textarea id="t1" placeholder="ここに貼り付け"></textarea>
+  </div>
+  
+  <div class="pb">
+    <span class="pl">2. タイム指数 (指数タブのデータ)</span>
+    <textarea id="t2" placeholder="ここに貼り付け"></textarea>
+  </div>
+  
+  <div class="pb">
+    <span class="pl">3. コース分析 (有利な枠・脚質などの分析データ)</span>
+    <textarea id="t3" placeholder="ここに貼り付け"></textarea>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-clr" onclick="clearAll()">CLEAR</button>
+    <button class="btn btn-run" onclick="analyze()">RUN</button>
+  </div>
+
+  <div id="res"></div>
+</div>
+
+<script>
+function clearAll() {
+  document.getElementById("t1").value = "";
+  document.getElementById("t2").value = "";
+  document.getElementById("t3").value = "";
+  document.getElementById("res").innerHTML = "";
+}
+
+function getWakuMap(n){
+  let m={}; if(n<=8){for(let i=1;i<=n;i++)m[i]=i; return m;}
+  let h=1, extra=n-8, single=8-extra;
+  for(let w=1;w<=8;w++){if(w<=single){m[h++]=w;}else{m[h++]=w;m[h++]=w;}}
+  return m;
+}
+
+function parseBlocks(raw){
+  let lines = raw.split("\n").map(l=>l.trim()).filter(l=>l!=="");
+  let blocks = [], i=0;
+  while(i < lines.length){
+    if(/^[1-9]\d?$/.test(lines[i])){
+      let num = parseInt(lines[i]), j=i+1;
+      if(lines[j]==="--" || (lines[j+1]==="--" && lines[j]==="")){
+        let content = [], k=(lines[j]==="--"?j+1:j+2);
+        while(k < lines.length){
+          if(/^[1-9]\d?$/.test(lines[k]) && (lines[k+1]==="--" || lines[k+2]==="--")) break;
+          content.push(lines[k]); k++;
+        }
+        blocks.push({num:num, lines:content}); i=k; continue;
+      }
+    }
+    i++;
+  }
+  return blocks;
+}
+
+function analyze(){
+  const r1=document.getElementById("t1").value, r2=document.getElementById("t2").value, r3=document.getElementById("t3").value, out=document.getElementById("res");
+  if(!r1||!r2) return;
+  
+  let horses = parseBlocks(r1).map(b => {
+    let name="?", tan=999, ninki=99;
+    let dbIdx = b.lines.findIndex(l => l.includes("のデータベース"));
+    if(dbIdx!==-1) name = b.lines[dbIdx+2] || "?";
+    let tanMatch = b.lines.join(" ").match(/([\d.]+)\s*\((\d+)人気\)/);
+    if(tanMatch){ tan=parseFloat(tanMatch[1]); ninki=parseInt(tanMatch[2]); }
+    return {num:b.num, name:name, tan:tan, ninki:ninki, maxIdx:0, distIdx:0, courseIdx:0, lastIdx:0, dataPoint:0};
+  });
+
+  parseBlocks(r2).forEach(b => {
+    let h = horses.find(x => x.num === b.num);
+    if(h){
+      let data = b.lines.find(l => l.includes("\t"))?.split("\t") || [];
+      if(data.length > 10){
+        h.maxIdx = parseInt(data[1])||0; h.distIdx = parseInt(data[3])||0;
+        h.courseIdx = parseInt(data[4])||0; h.lastIdx = parseInt(data[7])||0;
+      }
+    }
+  });
+
+  r3.split("\n").forEach(l => {
+    let m = l.match(/^(\d{1,2})/);
+    if(m && l.includes("データ上位")){ 
+      let target = horses.find(h=>h.num===parseInt(m[1]));
+      if(target) target.dataPoint += 2; 
+    }
+  });
+
+  let wMap = getWakuMap(horses.length);
+  let maxC = Math.max(...horses.map(x=>x.courseIdx));
+  let maxD = Math.max(...horses.map(x=>x.distIdx));
+  let avgC = horses.reduce((a,b)=>a+b.courseIdx,0)/horses.length;
+
+  horses.forEach(h => {
+    h.waku = wMap[h.num];
+    let v = [h.maxIdx, h.distIdx, h.courseIdx, h.lastIdx].filter(x=>x>0);
+    h.stable = (v.length >= 3 && (Math.max(...v) - Math.min(...v) <= 5));
+    h.isDangerous = (h.maxIdx > 0 && h.lastIdx > 0 && h.maxIdx - h.lastIdx >= 5 && h.ninki <= 3);
+    h.isCRed = (h.courseIdx > 0 && h.courseIdx >= (maxC - 3));
+    h.isDRed = (h.distIdx > 0 && h.distIdx >= (maxD - 3));
+  });
+
+  let results = [];
+  let used = new Set();
+
+  let h_◎ = horses.find(h => !h.isDangerous && h.isCRed && h.dataPoint >= 2);
+  if(h_◎){ results.push({h:h_◎, m:"◎", c:"var(--acc)", r:1}); used.add(h_◎.num); }
+
+  let h_○ = horses.find(h => !used.has(h.num) && !h.isDangerous && (h.isDRed || h.stable));
+  if(h_○){ results.push({h:h_○, m:"○", c:"#4a8fd4", r:2}); used.add(h_○.num); }
+
+  let h_▲ = horses.find(h => !used.has(h.num) && !h.isDangerous && h.dataPoint >= 2);
+  if(h_▲){ results.push({h:h_▲, m:"▲", c:"var(--red)", r:3}); used.add(h_▲.num); }
+
+  let h_△ = horses
+    .filter(h => !used.has(h.num) && !h.isDangerous && (h.courseIdx > avgC || h.dataPoint >= 2))
+    .sort((a,b) => b.courseIdx - a.courseIdx)
+    .slice(0, 3);
+  h_△.forEach(h => { results.push({h:h, m:"△", c:"var(--sub)", r:4}); used.add(h.num); });
+
+  let h_👹 = horses.find(h => !used.has(h.num) && h.tan >= 15 && (h.isCRed || h.isDRed));
+  if(h_👹){ results.push({h:h_👹, m:"👹", c:"#4ad49a", r:5}); used.add(h_👹.num); }
+
+  out.innerHTML = `
+    <div class="sec">
+      <table>
+        <thead><tr><th>印</th><th>番</th><th>馬名</th><th>単勝</th></tr></thead>
+        <tbody>
+          ${results.sort((a,b)=>a.r-b.r).map(r => `
+            <tr>
+              <td class="tc"><span class="mark" style="color:${r.c}">${r.m}</span></td>
+              <td class="tc"><div class="wc w${r.h.waku}">${r.h.num}</div></td>
+              <td><b>${r.h.name}</b></td>
+              <td class="tc">${r.h.tan}</td>
+            </tr>
+          `).join("")}
+          ${horses.filter(h=>h.isDangerous).map(h => `
+            <tr style="opacity:0.5">
+              <td class="tc"><span class="mark" style="color:var(--red)">×</span></td>
+              <td class="tc"><div class="wc w${h.waku}">${h.num}</div></td>
+              <td>${h.name}</td>
+              <td class="tc">${h.tan}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+</script>
+</body>
+</html>
